@@ -124,4 +124,8 @@ class GraphViewModel(private val repository: BatteryRepository) : ViewModel() {
     fun nextDay() {
         if (!_day.value.isToday) _day.value = _day.value.next()
     }
+
+    fun goToToday() {
+        _day.value = DayRange.today()
+    }
 }

@@ -21,16 +21,20 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.batterymax.data.db.BatterySampleEntity
+import java.util.Calendar
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.Scroll
 import com.patrykandpatrick.vico.compose.cartesian.Zoom
@@ -51,6 +55,7 @@ fun GraphScreen(viewModel: GraphViewModel) {
     val state by viewModel.uiState.collectAsState()
 
     val modelProducer = remember { CartesianChartModelProducer() }
+    var scrollToNowToken by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(state.series, state.selectedSourceId) {
         val series = state.series ?: return@LaunchedEffect
@@ -123,10 +128,21 @@ fun GraphScreen(viewModel: GraphViewModel) {
             IconButton(onClick = viewModel::previousDay) {
                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous day")
             }
-            Text(
-                if (day.isToday) "Today" else day.label(),
-                style = MaterialTheme.typography.titleMedium
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    if (day.isToday) "Today" else day.label(),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                TextButton(
+                    onClick = {
+                        if (!day.isToday) viewModel.goToToday()
+                        scrollToNowToken++
+                    },
+                    enabled = state.series != null
+                ) {
+                    Text("Now")
+                }
+            }
             IconButton(onClick = viewModel::nextDay, enabled = !day.isToday) {
                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next day")
             }
@@ -154,7 +170,8 @@ fun GraphScreen(viewModel: GraphViewModel) {
                 BatteryChart(
                     modelProducer = modelProducer,
                     series = series,
-                    zoomPreset = state.zoomPreset
+                    zoomPreset = state.zoomPreset,
+                    scrollToNowToken = scrollToNowToken
                 )
             }
         }
@@ -165,7 +182,8 @@ fun GraphScreen(viewModel: GraphViewModel) {
 private fun BatteryChart(
     modelProducer: CartesianChartModelProducer,
     series: GraphSeries,
-    zoomPreset: GraphZoomPreset
+    zoomPreset: GraphZoomPreset,
+    scrollToNowToken: Int
 ) {
     val rangeProvider = remember(zoomPreset, series.firstX, series.lastX) {
         rangeProviderFor(zoomPreset, series)
@@ -183,6 +201,11 @@ private fun BatteryChart(
         scrollEnabled = true,
         initialScroll = initialScroll
     )
+
+    LaunchedEffect(scrollToNowToken) {
+        if (scrollToNowToken == 0) return@LaunchedEffect
+        scrollState.animateScroll(scrollTargetForNow(zoomPreset))
+    }
 
     CartesianChartHost(
         chart = rememberCartesianChart(
@@ -257,3 +280,26 @@ private fun initialScrollFor(zoomPreset: GraphZoomPreset): Scroll.Absolute =
         GraphZoomPreset.FullDay,
         GraphZoomPreset.FitToData -> Scroll.Absolute.Start
     }
+
+/** Scroll so the current time (or latest sample) is in view. */
+private fun scrollTargetForNow(zoomPreset: GraphZoomPreset): Scroll.Absolute =
+    when (zoomPreset) {
+        GraphZoomPreset.FitToData -> Scroll.Absolute.End
+        GraphZoomPreset.OneHour,
+        GraphZoomPreset.ThreeHours,
+        GraphZoomPreset.FullDay -> {
+            // Put "now" at the right edge of the visible window.
+            Scroll.Absolute.x(currentHourOfDay().coerceIn(0.0, 24.0), bias = 1f)
+        }
+    }
+
+private fun currentHourOfDay(): Double {
+    val cal = Calendar.getInstance()
+    val hours = cal.get(Calendar.HOUR_OF_DAY)
+    val minutes = cal.get(Calendar.MINUTE)
+    val seconds = cal.get(Calendar.SECOND)
+    val value = hours + minutes / 60.0 + seconds / 3600.0
+    // Match sample precision used elsewhere in the graph.
+    return kotlin.math.round(value * 10_000.0) / 10_000.0
+}
+

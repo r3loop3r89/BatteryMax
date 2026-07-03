@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.BatteryStd
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -33,6 +34,7 @@ import com.example.batterymax.ui.devices.DevicesScreen
 import com.example.batterymax.ui.devices.DevicesViewModel
 import com.example.batterymax.ui.graph.GraphScreen
 import com.example.batterymax.ui.graph.GraphViewModel
+import com.example.batterymax.ui.settings.SettingsScreen
 import com.example.batterymax.ui.theme.BatteryMaxTheme
 
 private data class Destination(val route: String, val label: String, val icon: ImageVector)
@@ -40,7 +42,8 @@ private data class Destination(val route: String, val label: String, val icon: I
 private val destinations = listOf(
     Destination("dashboard", "Dashboard", Icons.Default.BatteryStd),
     Destination("graph", "Graph", Icons.AutoMirrored.Filled.ShowChart),
-    Destination("devices", "Devices", Icons.Default.Bluetooth)
+    Destination("devices", "Devices", Icons.Default.Bluetooth),
+    Destination("settings", "Settings", Icons.Default.Settings)
 )
 
 class MainActivity : ComponentActivity() {
@@ -95,6 +98,9 @@ class MainActivity : ComponentActivity() {
                         }
                         composable("devices") {
                             DevicesScreen(viewModel(factory = factory))
+                        }
+                        composable("settings") {
+                            SettingsScreen()
                         }
                     }
                 }
