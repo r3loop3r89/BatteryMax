@@ -30,10 +30,18 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.batterymax.BatteryMaxApp
 import com.example.batterymax.data.db.BatterySampleEntity
+import com.example.batterymax.util.TimeFormats
 import java.util.Calendar
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.Scroll
@@ -45,12 +53,24 @@ import com.patrykandpatrick.vico.compose.cartesian.data.CartesianLayerRangeProvi
 import com.patrykandpatrick.vico.compose.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.compose.cartesian.data.lineSeries
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
+import com.patrykandpatrick.vico.compose.cartesian.marker.DefaultCartesianMarker
+import com.patrykandpatrick.vico.compose.cartesian.marker.LineCartesianLayerMarkerTarget
+import com.patrykandpatrick.vico.compose.cartesian.marker.rememberDefaultCartesianMarker
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoScrollState
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoZoomState
+import com.patrykandpatrick.vico.compose.common.Fill
+import com.patrykandpatrick.vico.compose.common.Insets
+import com.patrykandpatrick.vico.compose.common.component.ShapeComponent
+import com.patrykandpatrick.vico.compose.common.component.rememberLineComponent
+import com.patrykandpatrick.vico.compose.common.component.rememberShapeComponent
+import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
 
 @Composable
 fun GraphScreen(viewModel: GraphViewModel) {
+    val context = LocalContext.current
+    val preferences = (context.applicationContext as BatteryMaxApp).preferences
+    val use24Hour by preferences.use24HourClock.collectAsState()
     val day by viewModel.day.collectAsState()
     val state by viewModel.uiState.collectAsState()
 
@@ -166,12 +186,13 @@ fun GraphScreen(viewModel: GraphViewModel) {
                 )
             }
         } else {
-            key(state.selectedSourceId, day.startMillis, state.zoomPreset) {
+            key(state.selectedSourceId, day.startMillis, state.zoomPreset, use24Hour) {
                 BatteryChart(
                     modelProducer = modelProducer,
                     series = series,
                     zoomPreset = state.zoomPreset,
-                    scrollToNowToken = scrollToNowToken
+                    scrollToNowToken = scrollToNowToken,
+                    use24Hour = use24Hour
                 )
             }
         }
@@ -183,7 +204,8 @@ private fun BatteryChart(
     modelProducer: CartesianChartModelProducer,
     series: GraphSeries,
     zoomPreset: GraphZoomPreset,
-    scrollToNowToken: Int
+    scrollToNowToken: Int,
+    use24Hour: Boolean
 ) {
     val rangeProvider = remember(zoomPreset, series.firstX, series.lastX) {
         rangeProviderFor(zoomPreset, series)
@@ -207,6 +229,45 @@ private fun BatteryChart(
         scrollState.animateScroll(scrollTargetForNow(zoomPreset))
     }
 
+    val markerLabelBackground = rememberShapeComponent(
+        fill = Fill(MaterialTheme.colorScheme.surfaceContainerHighest),
+        shape = RoundedCornerShape(8.dp)
+    )
+    val markerLabel = rememberTextComponent(
+        style = TextStyle(
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 12.sp
+        ),
+        padding = Insets(horizontal = 8.dp, vertical = 4.dp),
+        background = markerLabelBackground
+    )
+    val markerGuideline = rememberLineComponent(
+        fill = Fill(MaterialTheme.colorScheme.outline)
+    )
+    val markerValueFormatter = remember(use24Hour) {
+        DefaultCartesianMarker.ValueFormatter { _, targets ->
+            val target = targets.firstOrNull() ?: return@ValueFormatter ""
+            val y = (target as? LineCartesianLayerMarkerTarget)
+                ?.points
+                ?.firstOrNull()
+                ?.entry
+                ?.y
+                ?: return@ValueFormatter ""
+            "%d%% at %s".format(
+                y.toInt(),
+                TimeFormats.formatHourOfDay(target.x, use24Hour)
+            )
+        }
+    }
+    val marker = rememberDefaultCartesianMarker(
+        label = markerLabel,
+        valueFormatter = markerValueFormatter,
+        indicator = { color: Color ->
+            ShapeComponent(fill = Fill(color), shape = CircleShape)
+        },
+        guideline = markerGuideline
+    )
+
     CartesianChartHost(
         chart = rememberCartesianChart(
             rememberLineCartesianLayer(rangeProvider = rangeProvider),
@@ -217,11 +278,10 @@ private fun BatteryChart(
             ),
             bottomAxis = HorizontalAxis.rememberBottom(
                 valueFormatter = CartesianValueFormatter { _, value, _ ->
-                    val hours = value.toInt().coerceIn(0, 23)
-                    val minutes = ((value - hours) * 60).toInt().coerceIn(0, 59)
-                    "%02d:%02d".format(hours, minutes)
+                    TimeFormats.formatHourOfDay(value, use24Hour)
                 }
-            )
+            ),
+            marker = marker
         ),
         modelProducer = modelProducer,
         scrollState = scrollState,

@@ -36,14 +36,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.example.batterymax.BatteryMaxApp
 import com.example.batterymax.data.db.BatterySampleEntity
 import com.example.batterymax.service.BatteryMonitorService
-import java.text.DateFormat
-import java.util.Date
+import com.example.batterymax.util.TimeFormats
 
 @Composable
 fun DashboardScreen(viewModel: DashboardViewModel) {
     val context = LocalContext.current
+    val preferences = (context.applicationContext as BatteryMaxApp).preferences
+    val use24Hour by preferences.use24HourClock.collectAsState()
     val phone by viewModel.phone.collectAsState()
     val btDevices by viewModel.btDevices.collectAsState()
     val running by viewModel.serviceRunning.collectAsState()
@@ -110,20 +112,22 @@ fun DashboardScreen(viewModel: DashboardViewModel) {
             }
         }
 
-        PhoneBatteryCard(phone)
+        PhoneBatteryCard(phone, use24Hour)
 
         if (btDevices.isEmpty()) {
             BluetoothBatteryCard(
                 deviceName = null,
                 sample = null,
-                connected = false
+                connected = false,
+                use24Hour = use24Hour
             )
         } else {
             btDevices.forEach { status ->
                 BluetoothBatteryCard(
                     deviceName = status.device.name,
                     sample = status.sample,
-                    connected = status.connected
+                    connected = status.connected,
+                    use24Hour = use24Hour
                 )
             }
         }
@@ -131,7 +135,7 @@ fun DashboardScreen(viewModel: DashboardViewModel) {
 }
 
 @Composable
-private fun PhoneBatteryCard(sample: BatterySampleEntity?) {
+private fun PhoneBatteryCard(sample: BatterySampleEntity?, use24Hour: Boolean) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -167,7 +171,7 @@ private fun PhoneBatteryCard(sample: BatterySampleEntity?) {
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    "Updated ${DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(sample.timestamp))}",
+                    "Updated ${TimeFormats.formatTime(sample.timestamp, use24Hour)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -180,7 +184,8 @@ private fun PhoneBatteryCard(sample: BatterySampleEntity?) {
 private fun BluetoothBatteryCard(
     deviceName: String?,
     sample: BatterySampleEntity?,
-    connected: Boolean
+    connected: Boolean,
+    use24Hour: Boolean
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -244,7 +249,7 @@ private fun BluetoothBatteryCard(
                         modifier = Modifier.padding(vertical = 8.dp)
                     )
                     Text(
-                        "Updated ${DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(sample.timestamp))}",
+                        "Updated ${TimeFormats.formatTime(sample.timestamp, use24Hour)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -257,7 +262,7 @@ private fun BluetoothBatteryCard(
                         modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                     )
                     Text(
-                        "Last seen ${DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(sample.timestamp))}",
+                        "Last seen ${TimeFormats.formatTime(sample.timestamp, use24Hour)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

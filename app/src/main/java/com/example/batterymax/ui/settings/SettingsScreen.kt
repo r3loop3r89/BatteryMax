@@ -25,13 +25,16 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +46,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.example.batterymax.BatteryMaxApp
 
 private data class PermissionStatus(
     val label: String,
@@ -56,6 +60,8 @@ private data class PermissionStatus(
 @Composable
 fun SettingsScreen() {
     val context = LocalContext.current
+    val preferences = (context.applicationContext as BatteryMaxApp).preferences
+    val use24Hour by preferences.use24HourClock.collectAsState()
     var refreshKey by remember { mutableIntStateOf(0) }
 
     LifecycleResumeEffect(Unit) {
@@ -97,6 +103,39 @@ fun SettingsScreen() {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        Text("Display", style = MaterialTheme.typography.titleSmall)
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Schedule,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 8.dp)
+                ) {
+                    Text("24-hour time", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (use24Hour) "Times use 24-hour format (14:35)"
+                        else "Times use 12-hour format (2:35 PM)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = use24Hour,
+                    onCheckedChange = preferences::setUse24HourClock
+                )
+            }
+        }
+
         Text("About", style = MaterialTheme.typography.titleSmall)
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
