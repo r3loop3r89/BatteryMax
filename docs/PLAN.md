@@ -86,14 +86,14 @@ Three destinations with Navigation Compose:
 
 ## Task Checklist
 
-- [ ] Add Room/KSP, Navigation Compose, ViewModel, and Vico dependencies to version catalog and build files
-- [ ] Create Room entities, DAOs, database, and BatteryRepository
-- [ ] Implement BatteryMonitorService foreground service with battery receiver, sampling policy, and boot receiver
-- [ ] Implement Bluetooth battery reading (hidden broadcast/reflection + BLE GATT fallback) and connection state tracking
-- [ ] Build Dashboard screen with live phone/BT battery, service toggle, and runtime permission flow
-- [ ] Build daily graph screen with day selector and Vico line chart
-- [ ] Build Bluetooth device picker screen backed by bonded devices list
-- [ ] Wire navigation, Application/AppContainer, manifest permissions, and verify with a Gradle build
+- [x] Add Room/KSP, Navigation Compose, ViewModel, and Vico dependencies to version catalog and build files
+- [x] Create Room entities, DAOs, database, and BatteryRepository
+- [x] Implement BatteryMonitorService foreground service with battery receiver, sampling policy, and boot receiver
+- [x] Implement Bluetooth battery reading (hidden broadcast/reflection + BLE GATT fallback) and connection state tracking
+- [x] Build Dashboard screen with live phone/BT battery, service toggle, and runtime permission flow
+- [x] Build daily graph screen with day selector and Vico line chart
+- [x] Build Bluetooth device picker screen backed by bonded devices list
+- [x] Wire navigation, Application/AppContainer, manifest permissions, and verify with a Gradle build
 
 ## Verification
 
