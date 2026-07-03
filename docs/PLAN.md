@@ -41,22 +41,58 @@ flowchart LR
 
 ## Background Monitoring
 
-- `BatteryMonitorService`: foreground service (`connectedDevice` when Bluetooth is granted, otherwise `specialUse`) with a persistent notification listing phone and each tracked BT device.
-- Registers `ACTION_BATTERY_CHANGED` for the phone battery.
-- Watches **every** tracked Bluetooth address (merged flows); connection state is published per address.
-- `BOOT_COMPLETED` receiver restarts the service after reboot; start/stop toggle on the Dashboard.
+### What runs in the background
+
+When **Background monitoring** is on, `BatteryMonitorService` runs as a **foreground service** (persistent notification). That keeps the process alive so battery updates can be recorded even when the app UI is closed.
+
+- Foreground service type: `connectedDevice` when Bluetooth is granted, otherwise `specialUse`.
+- Notification lists phone and each tracked Bluetooth device (one line per device when expanded).
+- Watches **every** tracked Bluetooth address (merged flows); connection state is published per address (`BatteryMonitorService.connectionStates`).
+- `BootReceiver` listens for `BOOT_COMPLETED` and restarts the service if monitoring was left enabled.
+- Dashboard start/stop toggle controls the service.
 - Manifest: `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_CONNECTED_DEVICE`, `FOREGROUND_SERVICE_SPECIAL_USE`, `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`, `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, `BLUETOOTH_CONNECT`.
 
-## Bluetooth Device Battery
+Samples are stored in Room as `BatterySampleEntity` rows. The phone uses `source = "phone"`; each Bluetooth device uses `source = <MAC address>`.
 
-Android has no public API for Classic Bluetooth battery, so use:
+### Phone battery — event and storage
 
-1. Primary: hidden system broadcast `android.bluetooth.device.action.BATTERY_LEVEL_CHANGED` plus `BluetoothDevice.getBatteryLevel()` via reflection.
-2. Fallback: BLE GATT read of Battery Service (0x180F / 0x2A19), polled periodically while connected.
+**Event:** the system sticky broadcast `Intent.ACTION_BATTERY_CHANGED`.
 
-- Devices screen lists bonded devices; **Track** adds a device (does not remove others); **Stop** removes only that device.
-- Permissions: `BLUETOOTH_CONNECT` (runtime, API 31+), legacy `BLUETOOTH` for API <= 30.
-- Connect/disconnect via `ACTION_ACL_CONNECTED` / `DISCONNECTED`; Dashboard shows connected vs disconnected UI per device.
+The service registers a receiver for that intent. Android delivers it:
+
+- immediately when the receiver is registered (current level), and
+- again whenever phone battery state changes (level, charging, temperature, voltage, and so on).
+
+**What is stored:** level percent, charging flag, temperature, voltage, and timestamp (`source = "phone"`).
+
+### Bluetooth battery — events and storage
+
+Android has no public API for Classic Bluetooth battery. For each **tracked** device, `BtBatteryReader.watch(address)` uses:
+
+1. **`android.bluetooth.device.action.BATTERY_LEVEL_CHANGED`** (hidden system broadcast) — main source of level updates for many headsets and watches.
+2. **`ACTION_ACL_CONNECTED` / `ACTION_ACL_DISCONNECTED`** — connection state (Dashboard connected vs disconnected UI). On connect, an immediate level read is attempted.
+3. **Reflection** `BluetoothDevice.getBatteryLevel()` — initial / on-connect reading.
+4. **BLE GATT** Battery Service (`0x180F` / `0x2A19`) — fallback poll about every 5 minutes while connected.
+
+**What is stored:** level percent and timestamp (`source = <MAC address>`; no temperature or voltage for Bluetooth).
+
+Devices screen lists bonded devices; **Track** adds a device (does not remove others); **Stop** removes only that device. Permissions: `BLUETOOTH_CONNECT` (runtime, API 31+), legacy `BLUETOOTH` for API <= 30.
+
+### When a record is written (sampling policy)
+
+Not every event is written to the database. `BatteryRepository.recordSample` only inserts if:
+
+- the **level percent changed**, or
+- at least **5 minutes** (`MIN_SAMPLE_INTERVAL_MS`) passed since the last stored sample for that source.
+
+A **5-minute timer** in the service also re-records the last known level for the phone and each tracked Bluetooth device (still subject to the same rules), so the graph keeps points even when the level sits still. Data older than ~30 days is pruned periodically.
+
+| Source | Trigger events | Stored when |
+| --- | --- | --- |
+| Phone | `ACTION_BATTERY_CHANGED` (+ 5-minute tick) | Level changed or ≥5 minutes since last sample |
+| Bluetooth | `BATTERY_LEVEL_CHANGED`, connect + reflection/GATT, 5-minute tick | Same sampling policy |
+
+In short: the app **reacts to system (and Bluetooth) battery events**, then **filters** writes so the database does not fill with identical levels every few seconds.
 
 ## UI (Compose, Material 3)
 
