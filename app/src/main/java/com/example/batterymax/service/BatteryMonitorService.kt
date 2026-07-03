@@ -24,24 +24,25 @@ import com.example.batterymax.bluetooth.BtBatteryEvent
 import com.example.batterymax.bluetooth.BtBatteryReader
 import com.example.batterymax.data.BatteryRepository
 import com.example.batterymax.data.db.BatterySampleEntity
+import com.example.batterymax.data.db.TrackedDeviceEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Foreground service that samples the phone battery and (optionally) a tracked
- * Bluetooth device's battery, persisting readings through [BatteryRepository].
+ * Foreground service that samples the phone battery and any tracked Bluetooth
+ * devices' batteries, persisting readings through [BatteryRepository].
  */
 class BatteryMonitorService : Service() {
 
@@ -50,10 +51,9 @@ class BatteryMonitorService : Service() {
     private lateinit var btReader: BtBatteryReader
 
     private var lastPhone: BatterySampleEntity? = null
-    private var lastBtLevel: Int? = null
-    private var btConnected = false
-    private var trackedName: String? = null
-    private var trackedAddress: String? = null
+    private val lastBtLevels = mutableMapOf<String, Int>()
+    private val btConnectedMap = mutableMapOf<String, Boolean>()
+    private var trackedDevices: List<TrackedDeviceEntity> = emptyList()
 
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -74,7 +74,6 @@ class BatteryMonitorService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startAsForeground()
 
-        // Sticky broadcast delivers the current phone battery state immediately.
         ContextCompat.registerReceiver(
             this,
             batteryReceiver,
@@ -82,37 +81,45 @@ class BatteryMonitorService : Service() {
             ContextCompat.RECEIVER_EXPORTED
         )
 
-        // Follow the tracked Bluetooth device; restart the watcher when it changes.
+        // Watch every tracked Bluetooth device; restart watchers when the list changes.
         scope.launch {
-            repository.trackedDevice.flatMapLatest { device ->
-                trackedAddress = device?.address
-                trackedName = device?.name
-                lastBtLevel = null
-                btConnected = false
+            repository.trackedDevices.flatMapLatest { devices ->
+                trackedDevices = devices
+                val activeAddresses = devices.map { it.address }.toSet()
+                lastBtLevels.keys.retainAll(activeAddresses)
+                btConnectedMap.keys.retainAll(activeAddresses)
+                publishBtConnectionStates()
                 updateNotification()
-                if (device != null) btReader.watch(device.address) else emptyFlow()
-            }.collectLatest { event ->
+
+                if (devices.isEmpty()) {
+                    emptyFlow()
+                } else {
+                    devices.map { device ->
+                        btReader.watch(device.address).map { event -> device.address to event }
+                    }.merge()
+                }
+            }.collect { (address, event) ->
                 when (event) {
                     is BtBatteryEvent.Battery -> {
-                        lastBtLevel = event.levelPercent
-                        trackedAddress?.let { address ->
-                            repository.recordSample(
-                                BatterySampleEntity(
-                                    timestamp = System.currentTimeMillis(),
-                                    levelPercent = event.levelPercent,
-                                    isCharging = false,
-                                    source = address
-                                )
+                        lastBtLevels[address] = event.levelPercent
+                        repository.recordSample(
+                            BatterySampleEntity(
+                                timestamp = System.currentTimeMillis(),
+                                levelPercent = event.levelPercent,
+                                isCharging = false,
+                                source = address
                             )
-                        }
+                        )
                     }
-                    is BtBatteryEvent.Connection -> btConnected = event.connected
+                    is BtBatteryEvent.Connection -> {
+                        btConnectedMap[address] = event.connected
+                        publishBtConnectionStates()
+                    }
                 }
                 updateNotification()
             }
         }
 
-        // Periodic tick: keep the 5-minute cadence and prune old data once per tick batch.
         scope.launch {
             var ticks = 0
             while (isActive) {
@@ -120,17 +127,15 @@ class BatteryMonitorService : Service() {
                 lastPhone?.let {
                     repository.recordSample(it.copy(id = 0, timestamp = System.currentTimeMillis()))
                 }
-                lastBtLevel?.let { level ->
-                    trackedAddress?.let { address ->
-                        repository.recordSample(
-                            BatterySampleEntity(
-                                timestamp = System.currentTimeMillis(),
-                                levelPercent = level,
-                                isCharging = false,
-                                source = address
-                            )
+                lastBtLevels.forEach { (address, level) ->
+                    repository.recordSample(
+                        BatterySampleEntity(
+                            timestamp = System.currentTimeMillis(),
+                            levelPercent = level,
+                            isCharging = false,
+                            source = address
                         )
-                    }
+                    )
                 }
                 if (++ticks % PRUNE_EVERY_TICKS == 0) repository.pruneOldSamples()
             }
@@ -167,8 +172,6 @@ class BatteryMonitorService : Service() {
         createChannel()
         val notification = buildNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // connectedDevice requires a granted Bluetooth (or similar) runtime permission.
-            // Fall back to specialUse for phone-only monitoring when Bluetooth is not granted.
             val type = if (hasBluetoothConnectPermission()) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
             } else {
@@ -190,10 +193,20 @@ class BatteryMonitorService : Service() {
 
     private fun buildNotification(): Notification {
         val phoneText = lastPhone?.let { "Phone ${it.levelPercent}%" } ?: "Phone —"
-        val btText = trackedName?.let { name ->
-            val level = lastBtLevel?.let { "$it%" } ?: if (btConnected) "…" else "off"
-            " • $name $level"
-        }.orEmpty()
+        val btLines = trackedDevices.map { device ->
+            val level = lastBtLevels[device.address]?.let { "$it%" }
+                ?: if (btConnectedMap[device.address] == true) "…" else "off"
+            "${device.name} $level"
+        }
+        // Collapsed: one-line summary. Expanded: one device per line.
+        val collapsedText = buildString {
+            append(phoneText)
+            if (btLines.isNotEmpty()) {
+                append(" • ")
+                append(btLines.joinToString(" • "))
+            }
+        }
+        val expandedText = (listOf(phoneText) + btLines).joinToString("\n")
 
         val contentIntent = PendingIntent.getActivity(
             this,
@@ -203,9 +216,10 @@ class BatteryMonitorService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_app_foreground)
             .setContentTitle("Battery monitoring active")
-            .setContentText(phoneText + btText)
+            .setContentText(collapsedText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(expandedText))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(contentIntent)
@@ -231,10 +245,15 @@ class BatteryMonitorService : Service() {
         }
     }
 
+    private fun publishBtConnectionStates() {
+        btConnectionStates.value = btConnectedMap.toMap()
+    }
+
     override fun onDestroy() {
         runCatching { unregisterReceiver(batteryReceiver) }
         scope.cancel()
         isRunning.value = false
+        btConnectionStates.value = emptyMap()
         super.onDestroy()
     }
 
@@ -249,6 +268,10 @@ class BatteryMonitorService : Service() {
 
         private val isRunning = MutableStateFlow(false)
         val running: StateFlow<Boolean> get() = isRunning
+
+        /** Address → connected for each tracked Bluetooth device. */
+        private val btConnectionStates = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+        val connectionStates: StateFlow<Map<String, Boolean>> get() = btConnectionStates
 
         fun start(context: Context) {
             setEnabled(context, true)

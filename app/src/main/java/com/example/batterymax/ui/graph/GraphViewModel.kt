@@ -62,25 +62,25 @@ class GraphViewModel(private val repository: BatteryRepository) : ViewModel() {
         _day.flatMapLatest { range ->
             repository.samplesBetween(range.startMillis, range.endMillis)
         },
-        repository.trackedDevice,
+        repository.trackedDevices,
         _selectedSourceId,
         _day,
         _zoomPreset
-    ) { samples, trackedDevice, selectedSourceId, day, zoomPreset ->
-        buildState(samples, trackedDevice, selectedSourceId, day, zoomPreset)
+    ) { samples, trackedDevices, selectedSourceId, day, zoomPreset ->
+        buildState(samples, trackedDevices, selectedSourceId, day, zoomPreset)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), GraphUiState())
 
     private fun buildState(
         samples: List<BatterySampleEntity>,
-        trackedDevice: TrackedDeviceEntity?,
+        trackedDevices: List<TrackedDeviceEntity>,
         selectedSourceId: String,
         day: DayRange,
         zoomPreset: GraphZoomPreset
     ): GraphUiState {
         val sources = buildList {
             add(GraphSource(BatterySampleEntity.SOURCE_PHONE, "Phone"))
-            if (trackedDevice != null) {
-                add(GraphSource(trackedDevice.address, trackedDevice.name))
+            trackedDevices.forEach { device ->
+                add(GraphSource(device.address, device.name))
             }
         }
         val resolvedSourceId = sources.firstOrNull { it.id == selectedSourceId }?.id

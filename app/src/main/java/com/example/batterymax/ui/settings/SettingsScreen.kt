@@ -113,7 +113,7 @@ fun SettingsScreen() {
                     )
                 }
                 Text(
-                    "Version $versionName ($versionCode)",
+                    "Version $versionName (${formatBuildStamp(versionCode)})",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp)
@@ -284,6 +284,16 @@ private fun statusText(status: PermissionStatus): String = when {
     !status.requiredOnThisDevice -> "Not required on this Android version"
     status.granted -> "Granted"
     else -> "Not granted"
+}
+
+/** Formats versionCode yyyyMMddHH as yyyy.MMddHH, e.g. 2026070310 → 2026.070310. */
+private fun formatBuildStamp(versionCode: Long): String {
+    val digits = versionCode.toString()
+    return if (digits.length == 10) {
+        "${digits.substring(0, 4)}.${digits.substring(4)}"
+    } else {
+        digits
+    }
 }
 
 private fun isIgnoringBatteryOptimizations(context: Context): Boolean {

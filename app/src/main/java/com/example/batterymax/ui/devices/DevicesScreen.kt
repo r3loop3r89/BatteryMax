@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -43,7 +44,10 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
     var permissionGranted by remember { mutableStateOf(viewModel.hasBluetoothPermission()) }
     val bondedDevices by viewModel.bondedDevices.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
-    val tracked by viewModel.trackedDevice.collectAsState()
+    val trackedDevices by viewModel.trackedDevices.collectAsState()
+    val trackedAddresses = remember(trackedDevices) {
+        trackedDevices.map { it.address }.toSet()
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -98,18 +102,36 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 16.dp)
         ) {
-            tracked?.let { device ->
-                item(key = "tracking") {
+            if (trackedDevices.isNotEmpty()) {
+                item(key = "tracking_header") {
+                    Text(
+                        "Tracking (${trackedDevices.size})",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+                items(trackedDevices, key = { "tracked_${it.address}" }) { device ->
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp)
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Tracking", style = MaterialTheme.typography.labelMedium)
-                            Text(device.name, style = MaterialTheme.typography.titleMedium)
-                            TextButton(onClick = viewModel::clearDevice) {
-                                Text("Stop tracking")
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(device.name, style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    device.address,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            TextButton(onClick = { viewModel.removeDevice(device.address) }) {
+                                Text("Stop")
                             }
                         }
                     }
@@ -137,8 +159,9 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                     items(connectedDevices, key = { "connected_${it.address}" }) { device ->
                         DeviceRow(
                             device = device,
-                            isTracked = tracked?.address == device.address,
-                            onTrack = { viewModel.selectDevice(device) }
+                            isTracked = device.address in trackedAddresses,
+                            onTrack = { viewModel.selectDevice(device) },
+                            onStop = { viewModel.removeDevice(device.address) }
                         )
                     }
                 }
@@ -164,8 +187,9 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
                     items(otherDevices, key = { "other_${it.address}" }) { device ->
                         DeviceRow(
                             device = device,
-                            isTracked = tracked?.address == device.address,
-                            onTrack = { viewModel.selectDevice(device) }
+                            isTracked = device.address in trackedAddresses,
+                            onTrack = { viewModel.selectDevice(device) },
+                            onStop = { viewModel.removeDevice(device.address) }
                         )
                     }
                 }
@@ -178,7 +202,8 @@ fun DevicesScreen(viewModel: DevicesViewModel) {
 private fun DeviceRow(
     device: BondedDevice,
     isTracked: Boolean,
-    onTrack: () -> Unit
+    onTrack: () -> Unit,
+    onStop: () -> Unit
 ) {
     ListItem(
         headlineContent = { Text(device.name) },
@@ -220,11 +245,16 @@ private fun DeviceRow(
         },
         trailingContent = {
             if (isTracked) {
-                Icon(
-                    Icons.Default.CheckCircle,
-                    contentDescription = "Tracked",
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.CheckCircle,
+                        contentDescription = "Tracked",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    TextButton(onClick = onStop) {
+                        Text("Stop")
+                    }
+                }
             } else {
                 TextButton(onClick = onTrack) {
                     Text("Track")

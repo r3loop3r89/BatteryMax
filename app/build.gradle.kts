@@ -1,8 +1,17 @@
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
 }
+
+// Marketing version stays "1"; build stamp is the integer versionCode (yyyyMMddHH).
+// Settings shows e.g. "Version 1 (2026.071010)".
+val appVersionCode = LocalDateTime.now()
+    .format(DateTimeFormatter.ofPattern("yyyyMMddHH"))
+    .toInt()
 
 android {
     namespace = "com.example.batterymax"
@@ -16,8 +25,8 @@ android {
         applicationId = "com.example.batterymax"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = appVersionCode
+        versionName = "1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

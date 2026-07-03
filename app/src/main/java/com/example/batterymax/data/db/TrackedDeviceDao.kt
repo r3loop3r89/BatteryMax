@@ -11,12 +11,15 @@ interface TrackedDeviceDao {
     @Upsert
     suspend fun upsert(device: TrackedDeviceEntity)
 
+    @Query("DELETE FROM tracked_devices WHERE address = :address")
+    suspend fun delete(address: String)
+
     @Query("DELETE FROM tracked_devices")
     suspend fun clear()
 
-    @Query("SELECT * FROM tracked_devices WHERE enabled = 1 LIMIT 1")
-    fun observeTracked(): Flow<TrackedDeviceEntity?>
+    @Query("SELECT * FROM tracked_devices WHERE enabled = 1 ORDER BY name COLLATE NOCASE ASC")
+    fun observeAllTracked(): Flow<List<TrackedDeviceEntity>>
 
-    @Query("SELECT * FROM tracked_devices WHERE enabled = 1 LIMIT 1")
-    suspend fun tracked(): TrackedDeviceEntity?
+    @Query("SELECT * FROM tracked_devices WHERE enabled = 1 ORDER BY name COLLATE NOCASE ASC")
+    suspend fun allTracked(): List<TrackedDeviceEntity>
 }

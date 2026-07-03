@@ -19,9 +19,9 @@ class BatteryRepository(
 
     fun latestFor(source: String): Flow<BatterySampleEntity?> = sampleDao.observeLatest(source)
 
-    val trackedDevice: Flow<TrackedDeviceEntity?> = deviceDao.observeTracked()
+    val trackedDevices: Flow<List<TrackedDeviceEntity>> = deviceDao.observeAllTracked()
 
-    suspend fun trackedDeviceNow(): TrackedDeviceEntity? = deviceDao.tracked()
+    suspend fun trackedDevicesNow(): List<TrackedDeviceEntity> = deviceDao.allTracked()
 
     fun samplesBetween(startMillis: Long, endMillis: Long): Flow<List<BatterySampleEntity>> =
         sampleDao.observeBetween(startMillis, endMillis)
@@ -50,13 +50,13 @@ class BatteryRepository(
         sampleDao.deleteOlderThan(now - RETENTION_MS)
     }
 
-    suspend fun setTrackedDevice(address: String, name: String) {
-        deviceDao.clear()
+    /** Adds or updates a tracked Bluetooth device (does not remove others). */
+    suspend fun addTrackedDevice(address: String, name: String) {
         deviceDao.upsert(TrackedDeviceEntity(address = address, name = name))
     }
 
-    suspend fun clearTrackedDevice() {
-        deviceDao.clear()
+    suspend fun removeTrackedDevice(address: String) {
+        deviceDao.delete(address)
     }
 
     companion object {

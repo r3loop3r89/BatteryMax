@@ -1,21 +1,17 @@
 # BatteryMax App Plan
 
-Build BatteryMax: a Compose app that monitors phone battery in the background via a foreground service, stores samples in Room, renders a daily battery graph, and additionally tracks the battery level of a user-selected Bluetooth device.
-
-## Current State
-
-Fresh Compose template ([app/build.gradle.kts](../app/build.gradle.kts)): Kotlin, Material 3, minSdk 24, targetSdk 36, single `MainActivity`. No Room, no DI, no navigation yet.
+Build BatteryMax: a Compose app that monitors phone battery in the background via a foreground service, stores samples in Room, renders a daily battery graph, and tracks battery levels for **one or more** user-selected Bluetooth devices.
 
 ## Architecture
 
-MVVM with a repository layer. Manual DI via a simple `AppContainer` in the `Application` class (keeps the build light; Room already needs KSP, no need for Hilt).
+MVVM with a repository layer. Manual DI via the `Application` class (`BatteryMaxApp`).
 
 ```mermaid
 flowchart LR
     subgraph bg [Background]
         Service[BatteryMonitorService foreground service]
         BatteryRx[ACTION_BATTERY_CHANGED receiver]
-        BtRx[Bluetooth battery listener]
+        BtRx[Bluetooth battery listeners per device]
     end
     subgraph data [Data Layer]
         Repo[BatteryRepository]
@@ -25,6 +21,7 @@ flowchart LR
         Dashboard[Dashboard screen]
         Graph[Daily graph screen]
         Devices[Bluetooth device picker]
+        Settings[Settings screen]
     end
     BatteryRx --> Service
     BtRx --> Service
@@ -37,64 +34,62 @@ flowchart LR
 
 ## Data Layer (Room)
 
-- `BatterySampleEntity`: id, timestamp, levelPercent, isCharging, temperature, voltage, `source` (PHONE or BT device address). One table for both phone and Bluetooth samples keeps the daily-graph query uniform.
-- `TrackedDeviceEntity`: Bluetooth MAC address, display name, enabled flag.
-- DAOs with `Flow` queries: latest sample per source, samples for a given day range.
-- Sampling policy: insert on battery level change or every 5 minutes (whichever first) to keep the DB small; periodic cleanup of data older than ~30 days.
+- `BatterySampleEntity`: id, timestamp, levelPercent, isCharging, temperature, voltage, `source` (PHONE or BT device MAC address). One table for phone and all Bluetooth samples.
+- `TrackedDeviceEntity`: Bluetooth MAC address (primary key), display name, enabled flag. **Multiple rows** — one per tracked device.
+- DAOs with `Flow` queries: all tracked devices, latest sample per source, samples for a day range.
+- Sampling policy: insert on battery level change or every 5 minutes; prune data older than ~30 days.
 
 ## Background Monitoring
 
-- `BatteryMonitorService`: foreground service (`connectedDevice` type) with a persistent notification showing current phone and BT battery levels.
-- Registers `ACTION_BATTERY_CHANGED` receiver for the phone battery.
-- `BOOT_COMPLETED` receiver to restart the service after reboot; start/stop toggle in the UI.
-- Manifest: `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_CONNECTED_DEVICE`, `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`.
+- `BatteryMonitorService`: foreground service (`connectedDevice` when Bluetooth is granted, otherwise `specialUse`) with a persistent notification listing phone and each tracked BT device.
+- Registers `ACTION_BATTERY_CHANGED` for the phone battery.
+- Watches **every** tracked Bluetooth address (merged flows); connection state is published per address.
+- `BOOT_COMPLETED` receiver restarts the service after reboot; start/stop toggle on the Dashboard.
+- Manifest: `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_CONNECTED_DEVICE`, `FOREGROUND_SERVICE_SPECIAL_USE`, `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`, `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, `BLUETOOTH_CONNECT`.
 
 ## Bluetooth Device Battery
 
-Android has no public API for Classic Bluetooth battery, so use a two-pronged approach:
+Android has no public API for Classic Bluetooth battery, so use:
 
-1. Primary: listen for the hidden system broadcast `android.bluetooth.device.action.BATTERY_LEVEL_CHANGED` (works for most headsets/watches; used by apps like BatON) plus reading `BluetoothDevice.getBatteryLevel()` via reflection for the initial value.
-2. Fallback for BLE devices: connect GATT and read the standard Battery Service (0x180F / 0x2A19), with periodic polling while connected.
+1. Primary: hidden system broadcast `android.bluetooth.device.action.BATTERY_LEVEL_CHANGED` plus `BluetoothDevice.getBatteryLevel()` via reflection.
+2. Fallback: BLE GATT read of Battery Service (0x180F / 0x2A19), polled periodically while connected.
 
-- Device picker screen lists bonded devices (`BluetoothAdapter.bondedDevices`); the user selects one to track, stored in `TrackedDeviceEntity`.
+- Devices screen lists bonded devices; **Track** adds a device (does not remove others); **Stop** removes only that device.
 - Permissions: `BLUETOOTH_CONNECT` (runtime, API 31+), legacy `BLUETOOTH` for API <= 30.
-- Track connect/disconnect via `ACTION_ACL_CONNECTED`/`DISCONNECTED` so the dashboard can show "disconnected" state.
+- Connect/disconnect via `ACTION_ACL_CONNECTED` / `DISCONNECTED`; Dashboard shows connected vs disconnected UI per device.
 
 ## UI (Compose, Material 3)
 
-Three destinations with Navigation Compose:
+Four destinations with Navigation Compose:
 
-- Dashboard: current phone battery (level, charging state, temperature, voltage) and the tracked Bluetooth device's battery; service start/stop toggle; permission prompts.
-- Daily graph: line chart of battery level over a selected day (day back/forward arrows), separate lines/toggle for phone vs Bluetooth device. Chart via the Vico Compose charting library.
-- Device settings: pick/clear the tracked Bluetooth device.
+- **Dashboard**: phone battery card; one Bluetooth card per tracked device (large % when connected, smaller % + Disconnected chip when not); monitoring toggle.
+- **Graph**: device chips for Phone and all tracked devices; day navigation; zoom presets (1h, 3h, 100%, fit-to-data); Now button scrolls to current time.
+- **Devices**: pull-to-refresh bonded list, connected devices first; track/stop multiple devices.
+- **Settings**: version (`Version 1 (yyyy.MMddHH)`), permission status, battery-optimization opt-out.
 
-## New Dependencies
+## Versioning
+
+- `versionName` = `"1"`
+- `versionCode` = `yyyyMMddHH` at build time (local clock)
+- Settings formats the code as `yyyy.MMddHH` for display
+
+## Dependencies
 
 - Room (runtime, ktx, compiler via KSP) + KSP plugin
-- `androidx.navigation:navigation-compose`
-- `androidx.lifecycle:lifecycle-viewmodel-compose`
-- Vico (`com.patrykandpatrick.vico:compose-m3`) for charts
-
-## Key Files to Create
-
-- `data/db/` — entities, DAOs, `AppDatabase`
-- `data/BatteryRepository.kt`
-- `service/BatteryMonitorService.kt`, `service/BootReceiver.kt`
-- `bluetooth/BtBatteryReader.kt` (broadcast + reflection + GATT)
-- `ui/dashboard/`, `ui/graph/`, `ui/devices/` screens + ViewModels
-- `BatteryMaxApp.kt` (Application + AppContainer), update [AndroidManifest.xml](../app/src/main/AndroidManifest.xml)
+- Navigation Compose, Lifecycle ViewModel Compose
+- Vico (`compose-m3`) for charts
 
 ## Task Checklist
 
-- [x] Add Room/KSP, Navigation Compose, ViewModel, and Vico dependencies to version catalog and build files
+- [x] Add Room/KSP, Navigation Compose, ViewModel, and Vico dependencies
 - [x] Create Room entities, DAOs, database, and BatteryRepository
-- [x] Implement BatteryMonitorService foreground service with battery receiver, sampling policy, and boot receiver
-- [x] Implement Bluetooth battery reading (hidden broadcast/reflection + BLE GATT fallback) and connection state tracking
-- [x] Build Dashboard screen with live phone/BT battery, service toggle, and runtime permission flow
-- [x] Build daily graph screen with day selector and Vico line chart
-- [x] Build Bluetooth device picker screen backed by bonded devices list
-- [x] Wire navigation, Application/AppContainer, manifest permissions, and verify with a Gradle build
+- [x] Implement BatteryMonitorService and boot receiver
+- [x] Implement Bluetooth battery reading and connection state tracking
+- [x] Build Dashboard, Graph, Devices, and Settings screens
+- [x] Wire navigation, manifest permissions, and verify build
+- [x] Support multiple tracked Bluetooth devices (list in DB, service, Dashboard, Graph, Devices)
+- [x] Date/hour-based versionCode with fixed versionName `1`
 
 ## Verification
 
-Build with Gradle, then test on a device/emulator: emulator battery controls for phone samples; real device with a paired headset for Bluetooth battery.
+Build with Gradle, then test on a device: enable monitoring, track two or more paired devices, confirm Dashboard cards and notification update per device, and Graph chips list each tracked device.

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -19,6 +20,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.BatteryStd
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.BluetoothDisabled
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -41,8 +45,7 @@ import java.util.Date
 fun DashboardScreen(viewModel: DashboardViewModel) {
     val context = LocalContext.current
     val phone by viewModel.phone.collectAsState()
-    val trackedDevice by viewModel.trackedDevice.collectAsState()
-    val btLatest by viewModel.btLatest.collectAsState()
+    val btDevices by viewModel.btDevices.collectAsState()
     val running by viewModel.serviceRunning.collectAsState()
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -109,10 +112,21 @@ fun DashboardScreen(viewModel: DashboardViewModel) {
 
         PhoneBatteryCard(phone)
 
-        BluetoothBatteryCard(
-            deviceName = trackedDevice?.name,
-            sample = btLatest
-        )
+        if (btDevices.isEmpty()) {
+            BluetoothBatteryCard(
+                deviceName = null,
+                sample = null,
+                connected = false
+            )
+        } else {
+            btDevices.forEach { status ->
+                BluetoothBatteryCard(
+                    deviceName = status.device.name,
+                    sample = status.sample,
+                    connected = status.connected
+                )
+            }
+        }
     }
 }
 
@@ -163,20 +177,51 @@ private fun PhoneBatteryCard(sample: BatterySampleEntity?) {
 }
 
 @Composable
-private fun BluetoothBatteryCard(deviceName: String?, sample: BatterySampleEntity?) {
+private fun BluetoothBatteryCard(
+    deviceName: String?,
+    sample: BatterySampleEntity?,
+    connected: Boolean
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    Icons.Default.Bluetooth,
+                    if (connected) Icons.Default.Bluetooth else Icons.Default.BluetoothDisabled,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.tertiary
+                    tint = if (connected) {
+                        MaterialTheme.colorScheme.tertiary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
                     deviceName ?: "Bluetooth device",
                     style = MaterialTheme.typography.titleMedium
                 )
+                if (deviceName != null && !connected) {
+                    Spacer(Modifier.width(8.dp))
+                    AssistChip(
+                        onClick = {},
+                        enabled = false,
+                        label = {
+                            Text("Disconnected", style = MaterialTheme.typography.labelSmall)
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.BluetoothDisabled,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        },
+                        colors = AssistChipDefaults.assistChipColors(
+                            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            disabledLeadingIconContentColor =
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    )
+                }
             }
             when {
                 deviceName == null -> Text(
@@ -186,12 +231,12 @@ private fun BluetoothBatteryCard(deviceName: String?, sample: BatterySampleEntit
                     modifier = Modifier.padding(top = 8.dp)
                 )
                 sample == null -> Text(
-                    "Waiting for a battery reading…",
+                    if (connected) "Waiting for a battery reading…" else "Disconnected",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp)
                 )
-                else -> {
+                connected -> {
                     Text(
                         "${sample.levelPercent}%",
                         style = MaterialTheme.typography.displayMedium,
@@ -200,6 +245,19 @@ private fun BluetoothBatteryCard(deviceName: String?, sample: BatterySampleEntit
                     )
                     Text(
                         "Updated ${DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(sample.timestamp))}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                else -> {
+                    Text(
+                        "${sample.levelPercent}%",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                    )
+                    Text(
+                        "Last seen ${DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(sample.timestamp))}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

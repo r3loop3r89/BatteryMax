@@ -30,8 +30,8 @@ class DevicesViewModel(
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
-    val trackedDevice: StateFlow<TrackedDeviceEntity?> = repository.trackedDevice
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    val trackedDevices: StateFlow<List<TrackedDeviceEntity>> = repository.trackedDevices
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun hasBluetoothPermission(): Boolean = btReader.hasPermission()
 
@@ -54,7 +54,6 @@ class DevicesViewModel(
                     compareByDescending<BondedDevice> { it.connected }
                         .thenBy { it.name.lowercase() }
                 )
-                // Keep the indicator visible briefly so pull-to-refresh feels responsive.
                 delay(250)
             } finally {
                 _isRefreshing.value = false
@@ -63,10 +62,10 @@ class DevicesViewModel(
     }
 
     fun selectDevice(device: BondedDevice) {
-        viewModelScope.launch { repository.setTrackedDevice(device.address, device.name) }
+        viewModelScope.launch { repository.addTrackedDevice(device.address, device.name) }
     }
 
-    fun clearDevice() {
-        viewModelScope.launch { repository.clearTrackedDevice() }
+    fun removeDevice(address: String) {
+        viewModelScope.launch { repository.removeTrackedDevice(address) }
     }
 }
