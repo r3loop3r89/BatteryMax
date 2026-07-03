@@ -132,7 +132,7 @@ class BtBatteryReader(private val context: Context) {
     private fun adapter(): BluetoothAdapter? =
         (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
 
-    private fun isConnected(device: BluetoothDevice): Boolean = try {
+    fun isConnected(device: BluetoothDevice): Boolean = try {
         val method = device.javaClass.getMethod("isConnected")
         method.invoke(device) as? Boolean ?: false
     } catch (_: Exception) {

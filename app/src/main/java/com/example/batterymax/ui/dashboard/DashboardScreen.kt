@@ -45,10 +45,35 @@ fun DashboardScreen(viewModel: DashboardViewModel) {
     val btLatest by viewModel.btLatest.collectAsState()
     val running by viewModel.serviceRunning.collectAsState()
 
-    val notificationPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) BatteryMonitorService.start(context)
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        // Start even if Bluetooth was denied — phone monitoring uses specialUse FGS.
+        BatteryMonitorService.start(context)
+    }
+
+    fun startMonitoring() {
+        val missing = buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.BLUETOOTH_CONNECT
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                add(Manifest.permission.BLUETOOTH_CONNECT)
+            }
+        }
+        if (missing.isEmpty()) {
+            BatteryMonitorService.start(context)
+        } else {
+            permissionLauncher.launch(missing.toTypedArray())
+        }
     }
 
     Column(
@@ -76,22 +101,7 @@ fun DashboardScreen(viewModel: DashboardViewModel) {
                 Switch(
                     checked = running,
                     onCheckedChange = { enable ->
-                        if (enable) {
-                            val needsNotifPermission =
-                                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                                    ContextCompat.checkSelfPermission(
-                                        context, Manifest.permission.POST_NOTIFICATIONS
-                                    ) != PackageManager.PERMISSION_GRANTED
-                            if (needsNotifPermission) {
-                                notificationPermissionLauncher.launch(
-                                    Manifest.permission.POST_NOTIFICATIONS
-                                )
-                            } else {
-                                BatteryMonitorService.start(context)
-                            }
-                        } else {
-                            BatteryMonitorService.stop(context)
-                        }
+                        if (enable) startMonitoring() else BatteryMonitorService.stop(context)
                     }
                 )
             }
