@@ -11,28 +11,36 @@ import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatterySaver
+import androidx.compose.material.icons.filled.BatteryStd
 import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Card
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -41,12 +49,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.example.batterymax.BatteryMaxApp
+import com.example.batterymax.ui.theme.StatusConnected
 
 private data class PermissionStatus(
     val label: String,
@@ -57,6 +69,7 @@ private data class PermissionStatus(
     val requiredOnThisDevice: Boolean
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen() {
     val context = LocalContext.current
@@ -96,102 +109,175 @@ fun SettingsScreen() {
         isIgnoringBatteryOptimizations(context)
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text("Display", style = MaterialTheme.typography.titleSmall)
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Default.Schedule,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 8.dp)
-                ) {
-                    Text("24-hour time", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        if (use24Hour) "Times use 24-hour format (14:35)"
-                        else "Times use 12-hour format (2:35 PM)",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Switch(
-                    checked = use24Hour,
-                    onCheckedChange = preferences::setUse24HourClock
-                )
-            }
+    Scaffold(
+        topBar = {
+            TopAppBar(title = { Text("Settings") })
         }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            SectionHeader("Display")
 
-        Text("About", style = MaterialTheme.typography.titleSmall)
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.Info,
-                        contentDescription = null,
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SettingsIconBadge(
+                        icon = Icons.Default.Schedule,
                         tint = MaterialTheme.colorScheme.primary
                     )
-                    Text(
-                        "Battery Max",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(start = 8.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("24-hour time", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            if (use24Hour) "14:35 format" else "2:35 PM format",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = use24Hour,
+                        onCheckedChange = preferences::setUse24HourClock
                     )
                 }
-                Text(
-                    "Version $versionName (${formatBuildStamp(versionCode)})",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-                Text(
-                    context.packageName,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            }
+
+            SectionHeader("Background")
+
+            BatteryOptimizationCard(
+                unrestricted = ignoringBatteryOptimizations,
+                onDisableOptimization = { requestIgnoreBatteryOptimizations(context) },
+                onOpenSettings = { openBatteryOptimizationSettings(context) }
+            )
+
+            SectionHeader("Permissions")
+
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                permissions.forEach { status ->
+                    PermissionCard(
+                        status = status,
+                        onRequest = {
+                            val permission = status.permission
+                            if (permission != null) {
+                                permissionLauncher.launch(permission)
+                            }
+                        },
+                        onOpenSettings = {
+                            context.startActivity(
+                                Intent(
+                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    Uri.fromParts("package", context.packageName, null)
+                                )
+                            )
+                        }
+                    )
+                }
+            }
+
+            SectionHeader("About")
+
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SettingsIconBadge(
+                        icon = Icons.Default.BatteryStd,
+                        tint = MaterialTheme.colorScheme.primary,
+                        size = 48.dp,
+                        iconSize = 28.dp
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Battery Max", style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Version $versionName · build ${formatBuildStamp(versionCode)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Monitors phone and Bluetooth battery levels over time",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         }
+    }
+}
 
-        Text("Background", style = MaterialTheme.typography.titleSmall)
-        BatteryOptimizationCard(
-            unrestricted = ignoringBatteryOptimizations,
-            onDisableOptimization = { requestIgnoreBatteryOptimizations(context) },
-            onOpenSettings = { openBatteryOptimizationSettings(context) }
+@Composable
+private fun SectionHeader(title: String) {
+    Text(
+        title,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary
+    )
+}
+
+@Composable
+private fun SettingsIconBadge(
+    icon: ImageVector,
+    tint: Color,
+    modifier: Modifier = Modifier,
+    size: Dp = 40.dp,
+    iconSize: Dp = 22.dp
+) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(iconSize)
         )
+    }
+}
 
-        Text("Permissions", style = MaterialTheme.typography.titleSmall)
-        permissions.forEach { status ->
-            PermissionCard(
-                status = status,
-                onRequest = {
-                    val permission = status.permission
-                    if (permission != null) {
-                        permissionLauncher.launch(permission)
-                    }
-                },
-                onOpenSettings = {
-                    context.startActivity(
-                        Intent(
-                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                            Uri.fromParts("package", context.packageName, null)
-                        )
-                    )
-                }
-            )
-        }
+@Composable
+private fun StatusIndicator(
+    ok: Boolean,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(7.dp)
+                .clip(CircleShape)
+                .background(
+                    if (ok) StatusConnected
+                    else MaterialTheme.colorScheme.error
+                )
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (ok) StatusConnected else MaterialTheme.colorScheme.error
+        )
     }
 }
 
@@ -201,45 +287,31 @@ private fun BatteryOptimizationCard(
     onDisableOptimization: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.BatterySaver,
-                    contentDescription = null,
+                SettingsIconBadge(
+                    icon = Icons.Default.BatterySaver,
                     tint = if (unrestricted) {
                         MaterialTheme.colorScheme.primary
                     } else {
                         MaterialTheme.colorScheme.error
                     }
                 )
-                Column(modifier = Modifier.padding(start = 8.dp).weight(1f)) {
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
                     Text("Battery optimization", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Turn this off so monitoring is less likely to be stopped in the background",
+                        "Keep unrestricted so background monitoring is less likely to pause",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Icon(
-                    if (unrestricted) Icons.Default.CheckCircle else Icons.Default.Warning,
-                    contentDescription = null,
-                    tint = if (unrestricted) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.error
-                    }
-                )
             }
-            Text(
-                if (unrestricted) "Unrestricted (recommended)" else "Optimized (may pause monitoring)",
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (unrestricted) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.error
-                },
-                modifier = Modifier.padding(top = 8.dp)
+            Spacer(Modifier.height(10.dp))
+            StatusIndicator(
+                ok = unrestricted,
+                label = if (unrestricted) "Unrestricted" else "Optimized — may pause monitoring"
             )
             if (!unrestricted) {
                 Row {
@@ -261,19 +333,17 @@ private fun PermissionCard(
     onRequest: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    val ok = status.granted || !status.requiredOnThisDevice
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    status.icon,
-                    contentDescription = null,
-                    tint = if (status.granted || !status.requiredOnThisDevice) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.error
-                    }
+                SettingsIconBadge(
+                    icon = status.icon,
+                    tint = if (ok) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.error
                 )
-                Column(modifier = Modifier.padding(start = 8.dp).weight(1f)) {
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
                     Text(status.label, style = MaterialTheme.typography.titleMedium)
                     Text(
                         status.description,
@@ -281,30 +351,9 @@ private fun PermissionCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Icon(
-                    if (status.granted || !status.requiredOnThisDevice) {
-                        Icons.Default.CheckCircle
-                    } else {
-                        Icons.Default.Warning
-                    },
-                    contentDescription = null,
-                    tint = if (status.granted || !status.requiredOnThisDevice) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.error
-                    }
-                )
             }
-            Text(
-                statusText(status),
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (status.granted || !status.requiredOnThisDevice) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.error
-                },
-                modifier = Modifier.padding(top = 8.dp)
-            )
+            Spacer(Modifier.height(10.dp))
+            StatusIndicator(ok = ok, label = statusText(status))
             if (status.requiredOnThisDevice && !status.granted) {
                 Row {
                     TextButton(onClick = onRequest) {
