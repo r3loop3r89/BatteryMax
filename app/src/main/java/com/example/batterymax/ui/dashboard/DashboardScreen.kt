@@ -1,10 +1,5 @@
 package com.example.batterymax.ui.dashboard
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -39,12 +34,18 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,19 +57,21 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import com.example.batterymax.BatteryMaxApp
 import com.example.batterymax.data.db.BatterySampleEntity
 import com.example.batterymax.service.BatteryMonitorService
 import com.example.batterymax.ui.theme.StatusConnected
 import com.example.batterymax.ui.theme.batteryLevelColor
 import com.example.batterymax.util.TimeFormats
+import com.example.batterymax.util.checkMonitoringRequirements
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     viewModel: DashboardViewModel,
-    onOpenGraph: (sourceId: String) -> Unit
+    onOpenGraph: (sourceId: String) -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     val context = LocalContext.current
     val preferences = (context.applicationContext as BatteryMaxApp).preferences
@@ -76,38 +79,29 @@ fun DashboardScreen(
     val phone by viewModel.phone.collectAsState()
     val btDevices by viewModel.btDevices.collectAsState()
     val running by viewModel.serviceRunning.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) {
+    fun startMonitoring() {
+        val requirements = checkMonitoringRequirements(context)
+        if (!requirements.isReady) {
+            scope.launch {
+                val result = snackbarHostState.showSnackbar(
+                    message = requirements.settingsSnackbarMessage(),
+                    actionLabel = "Settings",
+                    duration = SnackbarDuration.Long
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    onOpenSettings()
+                }
+            }
+            return
+        }
         BatteryMonitorService.start(context)
     }
 
-    fun startMonitoring() {
-        val missing = buildList {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                ContextCompat.checkSelfPermission(
-                    context, Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                add(Manifest.permission.POST_NOTIFICATIONS)
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-                ContextCompat.checkSelfPermission(
-                    context, Manifest.permission.BLUETOOTH_CONNECT
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                add(Manifest.permission.BLUETOOTH_CONNECT)
-            }
-        }
-        if (missing.isEmpty()) {
-            BatteryMonitorService.start(context)
-        } else {
-            permissionLauncher.launch(missing.toTypedArray())
-        }
-    }
-
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {

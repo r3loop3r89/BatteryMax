@@ -103,6 +103,15 @@ class MainActivity : ComponentActivity() {
                                 viewModel = viewModel(factory = factory),
                                 onOpenGraph = { sourceId ->
                                     navController.navigate(graphRoute(sourceId))
+                                },
+                                onOpenSettings = {
+                                    navController.navigate("settings") {
+                                        popUpTo(navController.graph.startDestinationId) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
                                 }
                             )
                         }

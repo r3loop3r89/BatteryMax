@@ -7,7 +7,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
-import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -32,6 +31,7 @@ import androidx.compose.material.icons.filled.BatteryStd
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -59,6 +59,12 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.example.batterymax.BatteryMaxApp
 import com.example.batterymax.ui.theme.StatusConnected
+import com.example.batterymax.util.OemBatteryGuidance
+import com.example.batterymax.util.OemGuidanceAction
+import com.example.batterymax.util.getOemBatteryGuidance
+import com.example.batterymax.util.isBatteryOptimizationDisabled
+import com.example.batterymax.util.openAppSettings
+import com.example.batterymax.util.openOemGuidanceAction
 
 private data class PermissionStatus(
     val label: String,
@@ -106,7 +112,10 @@ fun SettingsScreen() {
         )
     }
     val ignoringBatteryOptimizations = remember(refreshKey) {
-        isIgnoringBatteryOptimizations(context)
+        isBatteryOptimizationDisabled(context)
+    }
+    val oemGuidance = remember(refreshKey) {
+        getOemBatteryGuidance(context)
     }
 
     Scaffold(
@@ -158,6 +167,14 @@ fun SettingsScreen() {
                 onDisableOptimization = { requestIgnoreBatteryOptimizations(context) },
                 onOpenSettings = { openBatteryOptimizationSettings(context) }
             )
+
+            oemGuidance?.let { guidance ->
+                OemBackgroundGuidanceCard(
+                    guidance = guidance,
+                    onAction = { action -> openOemGuidanceAction(context, action) },
+                    onOpenAppSettings = { openAppSettings(context) }
+                )
+            }
 
             SectionHeader("Permissions")
 
@@ -282,6 +299,59 @@ private fun StatusIndicator(
 }
 
 @Composable
+private fun OemBackgroundGuidanceCard(
+    guidance: OemBatteryGuidance,
+    onAction: (OemGuidanceAction) -> Unit,
+    onOpenAppSettings: () -> Unit
+) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                SettingsIconBadge(
+                    icon = Icons.Default.Settings,
+                    tint = MaterialTheme.colorScheme.tertiary
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(guidance.oem.settingsCardTitle, style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        guidance.summary,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            guidance.steps.forEachIndexed { index, step ->
+                Text(
+                    "${index + 1}. $step",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+            }
+            Text(
+                "Settings paths can vary by software version. Re-check after system updates.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+            )
+            Row {
+                guidance.actions.forEach { action ->
+                    TextButton(onClick = { onAction(action) }) {
+                        Text(action.label)
+                    }
+                }
+                TextButton(onClick = onOpenAppSettings) {
+                    Text("App settings")
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun BatteryOptimizationCard(
     unrestricted: Boolean,
     onDisableOptimization: () -> Unit,
@@ -382,12 +452,6 @@ private fun formatBuildStamp(versionCode: Long): String {
     } else {
         digits
     }
-}
-
-private fun isIgnoringBatteryOptimizations(context: Context): Boolean {
-    val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
-        ?: return true
-    return powerManager.isIgnoringBatteryOptimizations(context.packageName)
 }
 
 @SuppressLint("BatteryLife")

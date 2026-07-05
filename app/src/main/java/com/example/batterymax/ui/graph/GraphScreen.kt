@@ -5,8 +5,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -16,6 +18,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.ShowChart
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -94,10 +98,21 @@ fun GraphScreen(
         }
     }
 
+    val dayLabel = if (day.isToday) "Today" else day.label()
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(state.label) },
+                title = {
+                    Column {
+                        Text(state.label, style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            dayLabel,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -110,14 +125,53 @@ fun GraphScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = viewModel::previousDay) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                            contentDescription = "Previous day"
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(dayLabel, style = MaterialTheme.typography.titleMedium)
+                        TextButton(
+                            onClick = {
+                                if (!day.isToday) viewModel.goToToday()
+                                scrollToNowToken++
+                            },
+                            enabled = state.series != null
+                        ) {
+                            Text("Now")
+                        }
+                    }
+                    IconButton(onClick = viewModel::nextDay, enabled = !day.isToday) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = "Next day"
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
             Text(
                 "Zoom",
                 style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.padding(horizontal = 16.dp)
+                color = MaterialTheme.colorScheme.primary
             )
+            Spacer(Modifier.height(8.dp))
             LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = PaddingValues(horizontal = 0.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(GraphZoomPreset.entries, key = { it.name }) { preset ->
@@ -129,64 +183,53 @@ fun GraphScreen(
                 }
             }
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = viewModel::previousDay) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous day")
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        if (day.isToday) "Today" else day.label(),
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    TextButton(
-                        onClick = {
-                            if (!day.isToday) viewModel.goToToday()
-                            scrollToNowToken++
-                        },
-                        enabled = state.series != null
-                    ) {
-                        Text("Now")
-                    }
-                }
-                IconButton(onClick = viewModel::nextDay, enabled = !day.isToday) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next day")
-                }
-            }
+            Spacer(Modifier.height(16.dp))
 
             val series = state.series
-            if (series == null) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "No samples recorded for ${state.label} on this day",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 24.dp)
-                    )
-                }
-            } else {
-                key(day.startMillis, state.zoomPreset, use24Hour) {
-                    BatteryChart(
-                        modelProducer = modelProducer,
-                        series = series,
-                        zoomPreset = state.zoomPreset,
-                        scrollToNowToken = scrollToNowToken,
-                        use24Hour = use24Hour,
+            ElevatedCard(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                if (series == null) {
+                    Box(
                         modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
+                            .fillMaxSize()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ShowChart,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 12.dp)
+                            )
+                            Text(
+                                "No samples on this day",
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "No battery readings recorded for ${state.label}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                } else {
+                    key(day.startMillis, state.zoomPreset, use24Hour) {
+                        BatteryChart(
+                            modelProducer = modelProducer,
+                            series = series,
+                            zoomPreset = state.zoomPreset,
+                            scrollToNowToken = scrollToNowToken,
+                            use24Hour = use24Hour,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 8.dp, vertical = 12.dp)
+                        )
+                    }
                 }
             }
         }
@@ -351,7 +394,6 @@ private fun initialZoomFor(zoomPreset: GraphZoomPreset): Zoom =
 
 private fun initialScrollFor(zoomPreset: GraphZoomPreset): Scroll.Absolute =
     when (zoomPreset) {
-        // Show the latest / current end of the day window.
         GraphZoomPreset.OneHour,
         GraphZoomPreset.ThreeHours -> Scroll.Absolute.End
         GraphZoomPreset.FullDay,
@@ -365,7 +407,6 @@ private fun scrollTargetForNow(zoomPreset: GraphZoomPreset): Scroll.Absolute =
         GraphZoomPreset.OneHour,
         GraphZoomPreset.ThreeHours,
         GraphZoomPreset.FullDay -> {
-            // Put "now" at the right edge of the visible window.
             Scroll.Absolute.x(currentHourOfDay().coerceIn(0.0, 24.0), bias = 1f)
         }
     }
@@ -376,6 +417,5 @@ private fun currentHourOfDay(): Double {
     val minutes = cal.get(Calendar.MINUTE)
     val seconds = cal.get(Calendar.SECOND)
     val value = hours + minutes / 60.0 + seconds / 3600.0
-    // Match sample precision used elsewhere in the graph.
     return kotlin.math.round(value * 10_000.0) / 10_000.0
 }
