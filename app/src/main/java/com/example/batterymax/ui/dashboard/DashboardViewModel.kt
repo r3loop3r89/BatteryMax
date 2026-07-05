@@ -45,7 +45,12 @@ class DashboardViewModel(repository: BatteryRepository) : ViewModel() {
                             )
                         }
                     }
-                ) { statuses -> statuses.toList() }
+                ) { statuses ->
+                    statuses.toList().sortedWith(
+                        compareByDescending<BtDeviceStatus> { it.connected }
+                            .thenBy { it.device.name.lowercase() }
+                    )
+                }
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())

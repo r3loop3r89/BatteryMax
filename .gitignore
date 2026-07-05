@@ -1,15 +1,71 @@
-*.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+# --- Android build outputs ---
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+bin/
+gen/
+out/
+release/
+build/
+**/build/
+
+# --- Gradle ---
+.gradle/
+gradle-app.setting
+!gradle/wrapper/gradle-wrapper.jar
+
+# --- Local machine / secrets ---
 local.properties
+*.jks
+*.keystore
+*.keystore.properties
+google-services.json
+
+# --- Android Studio / IntelliJ ---
+*.iml
+.idea/
+*.ipr
+*.iws
+
+# --- Native / NDK ---
+.externalNativeBuild/
+.cxx/
+captures/
+
+# --- Logs & profiling ---
+*.log
+*.hprof
+
+# --- OS junk ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# --- Editor / assistant tooling (not part of the Android app) ---
+.vscode/
+.cursor/
+mcps/
+terminals/
+
+# --- Fastlane (if added later) ---
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/
+fastlane/readme.md
+
+# --- Lint ---
+lint/intermediates/
+lint/generated/
+lint/outputs/
+lint/tmp/
+
+# --- Kotlin ---
+.kotlin/
