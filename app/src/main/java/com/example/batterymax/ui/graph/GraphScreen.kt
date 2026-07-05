@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -48,6 +47,7 @@ import com.patrykandpatrick.vico.compose.cartesian.Scroll
 import com.patrykandpatrick.vico.compose.cartesian.Zoom
 import com.patrykandpatrick.vico.compose.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.compose.cartesian.axis.VerticalAxis
+import com.patrykandpatrick.vico.compose.cartesian.axis.rememberAxisGuidelineComponent
 import com.patrykandpatrick.vico.compose.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.compose.cartesian.data.CartesianLayerRangeProvider
 import com.patrykandpatrick.vico.compose.cartesian.data.CartesianValueFormatter
@@ -65,6 +65,9 @@ import com.patrykandpatrick.vico.compose.common.component.ShapeComponent
 import com.patrykandpatrick.vico.compose.common.component.rememberLineComponent
 import com.patrykandpatrick.vico.compose.common.component.rememberShapeComponent
 import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
+import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -158,7 +161,12 @@ fun GraphScreen(
 
             val series = state.series
             if (series == null) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text(
                         "No samples recorded for ${state.label} on this day",
                         style = MaterialTheme.typography.bodyLarge,
@@ -173,7 +181,11 @@ fun GraphScreen(
                         series = series,
                         zoomPreset = state.zoomPreset,
                         scrollToNowToken = scrollToNowToken,
-                        use24Hour = use24Hour
+                        use24Hour = use24Hour,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
             }
@@ -187,7 +199,8 @@ private fun BatteryChart(
     series: GraphSeries,
     zoomPreset: GraphZoomPreset,
     scrollToNowToken: Int,
-    use24Hour: Boolean
+    use24Hour: Boolean,
+    modifier: Modifier = Modifier
 ) {
     val rangeProvider = remember(zoomPreset, series.firstX, series.lastX) {
         rangeProviderFor(zoomPreset, series)
@@ -250,6 +263,22 @@ private fun BatteryChart(
         guideline = markerGuideline
     )
 
+    val hourGuideline = rememberAxisGuidelineComponent(
+        fill = Fill(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+    )
+    val hourAxisFormatter = remember(use24Hour) {
+        CartesianValueFormatter { _, value, _ ->
+            if (abs(value - value.toInt()) > 0.01) return@CartesianValueFormatter ""
+            TimeFormats.formatHourLabel(value.toInt(), use24Hour)
+        }
+    }
+    val hourItemPlacer = remember(zoomPreset) {
+        HorizontalAxis.ItemPlacer.aligned(
+            spacing = { labelSpacingFor(zoomPreset) },
+            addExtremeLabelPadding = true
+        )
+    }
+
     CartesianChartHost(
         chart = rememberCartesianChart(
             rememberLineCartesianLayer(rangeProvider = rangeProvider),
@@ -259,21 +288,28 @@ private fun BatteryChart(
                 }
             ),
             bottomAxis = HorizontalAxis.rememberBottom(
-                valueFormatter = CartesianValueFormatter { _, value, _ ->
-                    TimeFormats.formatHourOfDay(value, use24Hour)
-                }
+                valueFormatter = hourAxisFormatter,
+                guideline = hourGuideline,
+                itemPlacer = hourItemPlacer
             ),
-            marker = marker
+            marker = marker,
+            getXStep = { _, _, _ -> 1.0 }
         ),
         modelProducer = modelProducer,
         scrollState = scrollState,
         zoomState = zoomState,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(300.dp)
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+        modifier = modifier
     )
 }
+
+/** Minimum spacing between hour labels; zoom presets widen the gap on full-day view. */
+private fun labelSpacingFor(zoomPreset: GraphZoomPreset): Int =
+    when (zoomPreset) {
+        GraphZoomPreset.OneHour,
+        GraphZoomPreset.ThreeHours,
+        GraphZoomPreset.FitToData -> 1
+        GraphZoomPreset.FullDay -> 2
+    }
 
 private fun rangeProviderFor(
     zoomPreset: GraphZoomPreset,
@@ -281,12 +317,11 @@ private fun rangeProviderFor(
 ): CartesianLayerRangeProvider =
     when (zoomPreset) {
         GraphZoomPreset.FitToData -> {
-            val minX = series.firstX
+            val minX = floor(series.firstX).coerceAtLeast(0.0)
             val maxX = if (series.lastX > series.firstX) {
-                series.lastX
+                ceil(series.lastX).coerceAtMost(24.0)
             } else {
-                // Single point: give the axis a small width so Vico can render.
-                (series.firstX + 0.25).coerceAtMost(24.0)
+                (minX + 1.0).coerceAtMost(24.0)
             }
             CartesianLayerRangeProvider.fixed(
                 minX = minX,
