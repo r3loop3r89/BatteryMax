@@ -193,11 +193,12 @@ class BatteryMonitorService : Service() {
 
     private fun buildNotification(): Notification {
         val phoneText = lastPhone?.let { "Phone ${it.levelPercent}%" } ?: "Phone —"
-        val btLines = trackedDevices.map { device ->
-            val level = lastBtLevels[device.address]?.let { "$it%" }
-                ?: if (btConnectedMap[device.address] == true) "…" else "off"
-            "${device.name} $level"
-        }
+        val btLines = trackedDevices
+            .filter { btConnectedMap[it.address] == true }
+            .map { device ->
+                val level = lastBtLevels[device.address]?.let { "$it%" } ?: "…"
+                "${device.name} $level"
+            }
         // Collapsed: one-line summary. Expanded: one device per line.
         val collapsedText = buildString {
             append(phoneText)

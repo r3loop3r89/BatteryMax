@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -42,7 +43,10 @@ import com.example.batterymax.service.BatteryMonitorService
 import com.example.batterymax.util.TimeFormats
 
 @Composable
-fun DashboardScreen(viewModel: DashboardViewModel) {
+fun DashboardScreen(
+    viewModel: DashboardViewModel,
+    onOpenGraph: (sourceId: String) -> Unit
+) {
     val context = LocalContext.current
     val preferences = (context.applicationContext as BatteryMaxApp).preferences
     val use24Hour by preferences.use24HourClock.collectAsState()
@@ -112,14 +116,19 @@ fun DashboardScreen(viewModel: DashboardViewModel) {
             }
         }
 
-        PhoneBatteryCard(phone, use24Hour)
+        PhoneBatteryCard(
+            sample = phone,
+            use24Hour = use24Hour,
+            onClick = { onOpenGraph(BatterySampleEntity.SOURCE_PHONE) }
+        )
 
         if (btDevices.isEmpty()) {
             BluetoothBatteryCard(
                 deviceName = null,
                 sample = null,
                 connected = false,
-                use24Hour = use24Hour
+                use24Hour = use24Hour,
+                onClick = null
             )
         } else {
             btDevices.forEach { status ->
@@ -127,7 +136,8 @@ fun DashboardScreen(viewModel: DashboardViewModel) {
                     deviceName = status.device.name,
                     sample = status.sample,
                     connected = status.connected,
-                    use24Hour = use24Hour
+                    use24Hour = use24Hour,
+                    onClick = { onOpenGraph(status.device.address) }
                 )
             }
         }
@@ -135,8 +145,16 @@ fun DashboardScreen(viewModel: DashboardViewModel) {
 }
 
 @Composable
-private fun PhoneBatteryCard(sample: BatterySampleEntity?, use24Hour: Boolean) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+private fun PhoneBatteryCard(
+    sample: BatterySampleEntity?,
+    use24Hour: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -176,6 +194,12 @@ private fun PhoneBatteryCard(sample: BatterySampleEntity?, use24Hour: Boolean) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            Text(
+                "Tap to view history",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp)
+            )
         }
     }
 }
@@ -185,9 +209,16 @@ private fun BluetoothBatteryCard(
     deviceName: String?,
     sample: BatterySampleEntity?,
     connected: Boolean,
-    use24Hour: Boolean
+    use24Hour: Boolean,
+    onClick: (() -> Unit)?
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+            )
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -267,6 +298,14 @@ private fun BluetoothBatteryCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            }
+            if (onClick != null) {
+                Text(
+                    "Tap to view history",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
             }
         }
     }

@@ -19,7 +19,7 @@ flowchart LR
     end
     subgraph ui [UI - Compose]
         Dashboard[Dashboard screen]
-        Graph[Daily graph screen]
+        Graph[Daily graph screen - from Dashboard tap]
         Devices[Bluetooth device picker]
         Settings[Settings screen]
     end
@@ -46,7 +46,7 @@ flowchart LR
 When **Background monitoring** is on, `BatteryMonitorService` runs as a **foreground service** (persistent notification). That keeps the process alive so battery updates can be recorded even when the app UI is closed.
 
 - Foreground service type: `connectedDevice` when Bluetooth is granted, otherwise `specialUse`.
-- Notification lists phone and each tracked Bluetooth device (one line per device when expanded).
+- Notification lists phone and **only connected** tracked Bluetooth devices (one line per connected device when expanded); disconnected devices remain on the Dashboard only.
 - Watches **every** tracked Bluetooth address (merged flows); connection state is published per address (`BatteryMonitorService.connectionStates`).
 - `BootReceiver` listens for `BOOT_COMPLETED` and restarts the service if monitoring was left enabled.
 - Dashboard start/stop toggle controls the service.
@@ -96,10 +96,10 @@ In short: the app **reacts to system (and Bluetooth) battery events**, then **fi
 
 ## UI (Compose, Material 3)
 
-Four destinations with Navigation Compose:
+Three bottom-nav tabs plus a graph detail screen (Navigation Compose):
 
-- **Dashboard**: phone battery card; one Bluetooth card per tracked device (large % when connected, smaller % + Disconnected chip when not); monitoring toggle.
-- **Graph**: device chips for Phone and all tracked devices; day navigation; zoom presets (1h, 3h, 100%, fit-to-data); Now button scrolls to current time.
+- **Dashboard**: phone battery card; one Bluetooth card per tracked device (large % when connected, smaller % + Disconnected chip when not); monitoring toggle. Tap any device card to open its graph.
+- **Graph** (detail, not in bottom nav): battery chart for the tapped device; day navigation; zoom presets (1h, 3h, 100%, fit-to-data); Now button scrolls to current time; back returns to Dashboard.
 - **Devices**: pull-to-refresh bonded list, connected devices first; track/stop multiple devices.
 - **Settings**: version (`Version 1 (yyyy.MMddHH)`), permission status, battery-optimization opt-out.
 
@@ -128,4 +128,4 @@ Four destinations with Navigation Compose:
 
 ## Verification
 
-Build with Gradle, then test on a device: enable monitoring, track two or more paired devices, confirm Dashboard cards and notification update per device, and Graph chips list each tracked device.
+Build with Gradle, then test on a device: enable monitoring, track two or more paired devices, confirm Dashboard cards list every tracked device (with connected/disconnected status), the notification shows only connected devices, and tapping each Dashboard card opens the correct device graph.

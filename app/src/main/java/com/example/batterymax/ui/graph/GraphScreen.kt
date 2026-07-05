@@ -11,17 +11,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.BatteryStd
-import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -30,8 +34,6 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -40,9 +42,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.batterymax.BatteryMaxApp
-import com.example.batterymax.data.db.BatterySampleEntity
 import com.example.batterymax.util.TimeFormats
-import java.util.Calendar
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.Scroll
 import com.patrykandpatrick.vico.compose.cartesian.Zoom
@@ -65,9 +65,14 @@ import com.patrykandpatrick.vico.compose.common.component.ShapeComponent
 import com.patrykandpatrick.vico.compose.common.component.rememberLineComponent
 import com.patrykandpatrick.vico.compose.common.component.rememberShapeComponent
 import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
+import java.util.Calendar
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GraphScreen(viewModel: GraphViewModel) {
+fun GraphScreen(
+    viewModel: GraphViewModel,
+    onNavigateBack: () -> Unit
+) {
     val context = LocalContext.current
     val preferences = (context.applicationContext as BatteryMaxApp).preferences
     val use24Hour by preferences.use24HourClock.collectAsState()
@@ -77,7 +82,7 @@ fun GraphScreen(viewModel: GraphViewModel) {
     val modelProducer = remember { CartesianChartModelProducer() }
     var scrollToNowToken by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(state.series, state.selectedSourceId) {
+    LaunchedEffect(state.series) {
         val series = state.series ?: return@LaunchedEffect
         modelProducer.runTransaction {
             lineSeries {
@@ -86,114 +91,91 @@ fun GraphScreen(viewModel: GraphViewModel) {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(top = 16.dp)
-    ) {
-        Text(
-            "Devices",
-            style = MaterialTheme.typography.titleSmall,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(state.sources, key = { it.id }) { source ->
-                val selected = source.id == state.selectedSourceId
-                FilterChip(
-                    selected = selected,
-                    onClick = { viewModel.selectSource(source.id) },
-                    label = { Text(source.label) },
-                    leadingIcon = {
-                        Icon(
-                            if (source.id == BatterySampleEntity.SOURCE_PHONE) {
-                                Icons.Default.BatteryStd
-                            } else {
-                                Icons.Default.Bluetooth
-                            },
-                            contentDescription = null
-                        )
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(state.label) },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
-                )
-            }
+                }
+            )
         }
-
-        Text(
-            "Zoom",
-            style = MaterialTheme.typography.titleSmall,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(GraphZoomPreset.entries, key = { it.name }) { preset ->
-                FilterChip(
-                    selected = preset == state.zoomPreset,
-                    onClick = { viewModel.selectZoomPreset(preset) },
-                    label = { Text(preset.label) }
-                )
-            }
-        }
-
-        Row(
+    ) { innerPadding ->
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
+                .padding(innerPadding)
         ) {
-            IconButton(onClick = viewModel::previousDay) {
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous day")
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    if (day.isToday) "Today" else day.label(),
-                    style = MaterialTheme.typography.titleMedium
-                )
-                TextButton(
-                    onClick = {
-                        if (!day.isToday) viewModel.goToToday()
-                        scrollToNowToken++
-                    },
-                    enabled = state.series != null
-                ) {
-                    Text("Now")
+            Text(
+                "Zoom",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(GraphZoomPreset.entries, key = { it.name }) { preset ->
+                    FilterChip(
+                        selected = preset == state.zoomPreset,
+                        onClick = { viewModel.selectZoomPreset(preset) },
+                        label = { Text(preset.label) }
+                    )
                 }
             }
-            IconButton(onClick = viewModel::nextDay, enabled = !day.isToday) {
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next day")
-            }
-        }
 
-        Text(
-            state.selectedLabel,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-        )
-
-        val series = state.series
-        if (series == null) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    "No samples recorded for ${state.selectedLabel} on this day",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 24.dp)
-                )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = viewModel::previousDay) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous day")
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        if (day.isToday) "Today" else day.label(),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    TextButton(
+                        onClick = {
+                            if (!day.isToday) viewModel.goToToday()
+                            scrollToNowToken++
+                        },
+                        enabled = state.series != null
+                    ) {
+                        Text("Now")
+                    }
+                }
+                IconButton(onClick = viewModel::nextDay, enabled = !day.isToday) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next day")
+                }
             }
-        } else {
-            key(state.selectedSourceId, day.startMillis, state.zoomPreset, use24Hour) {
-                BatteryChart(
-                    modelProducer = modelProducer,
-                    series = series,
-                    zoomPreset = state.zoomPreset,
-                    scrollToNowToken = scrollToNowToken,
-                    use24Hour = use24Hour
-                )
+
+            val series = state.series
+            if (series == null) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        "No samples recorded for ${state.label} on this day",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 24.dp)
+                    )
+                }
+            } else {
+                key(day.startMillis, state.zoomPreset, use24Hour) {
+                    BatteryChart(
+                        modelProducer = modelProducer,
+                        series = series,
+                        zoomPreset = state.zoomPreset,
+                        scrollToNowToken = scrollToNowToken,
+                        use24Hour = use24Hour
+                    )
+                }
             }
         }
     }
@@ -362,4 +344,3 @@ private fun currentHourOfDay(): Double {
     // Match sample precision used elsewhere in the graph.
     return kotlin.math.round(value * 10_000.0) / 10_000.0
 }
-

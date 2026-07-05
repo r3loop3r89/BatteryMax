@@ -7,15 +7,15 @@ BatteryMax is an Android app that keeps a continuous record of your phone's batt
 - **Background monitoring**: a foreground service samples the phone battery (level, charging state, temperature, voltage) continuously, surviving app closure and device reboots.
 - **Multiple Bluetooth devices**: track any number of paired Bluetooth devices (headsets, watches, earbuds). Each device is stored and monitored independently, with connected/disconnected status on the Dashboard.
 - **Local history**: all samples are stored on-device in a Room database (no network, no accounts). Old data is pruned automatically after ~30 days.
-- **Daily graph**: a line chart of battery level over any given day for the phone or any tracked Bluetooth device, with zoom presets and a Now button.
+- **Daily graph**: tap a device on the Dashboard to open its battery history chart for any day, with zoom presets and a Now button.
 - **Settings**: version info, permission status, and battery-optimization opt-out for reliable background monitoring.
 
 ## Screens
 
 | Screen | Purpose |
 | --- | --- |
-| Dashboard | Live phone and Bluetooth battery status (per device), monitoring on/off toggle |
-| Graph | Battery level chart for a selected device and day, with zoom chips and Now |
+| Dashboard | Live phone and Bluetooth battery status (per device), monitoring on/off toggle; tap a card to open its graph |
+| Graph | Battery level chart for one device and day (opened from Dashboard), with zoom chips and Now |
 | Devices | Track or stop tracking any number of paired Bluetooth devices |
 | Settings | Version, permissions, and battery optimization |
 
@@ -37,6 +37,8 @@ BatteryMax is an Android app that keeps a continuous record of your phone's batt
 ## How background monitoring works
 
 When **Background monitoring** is on, `BatteryMonitorService` runs as a **foreground service** (persistent notification). That keeps the process alive so battery updates can be recorded even when the app UI is closed. After reboot, `BootReceiver` starts the service again if monitoring was left enabled.
+
+The ongoing notification shows the phone battery and **only connected** tracked Bluetooth devices (one line per connected device when expanded). Disconnected devices stay visible on the Dashboard but are omitted from the notification.
 
 Samples are stored in Room as `BatterySampleEntity` rows. The phone uses `source = "phone"`; each Bluetooth device uses `source = <MAC address>`.
 

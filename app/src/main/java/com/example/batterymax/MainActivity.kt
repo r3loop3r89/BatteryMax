@@ -1,5 +1,6 @@
 package com.example.batterymax
 
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -7,7 +8,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.BatteryStd
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Settings
@@ -21,11 +21,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.batterymax.bluetooth.BtBatteryReader
 import com.example.batterymax.data.BatteryRepository
 import com.example.batterymax.ui.dashboard.DashboardScreen
@@ -39,12 +43,13 @@ import com.example.batterymax.ui.theme.BatteryMaxTheme
 
 private data class Destination(val route: String, val label: String, val icon: ImageVector)
 
-private val destinations = listOf(
+private val tabDestinations = listOf(
     Destination("dashboard", "Dashboard", Icons.Default.BatteryStd),
-    Destination("graph", "Graph", Icons.AutoMirrored.Filled.ShowChart),
     Destination("devices", "Devices", Icons.Default.Bluetooth),
     Destination("settings", "Settings", Icons.Default.Settings)
 )
+
+private fun graphRoute(sourceId: String): String = "graph/${Uri.encode(sourceId)}"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -59,28 +64,31 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 val backStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = backStackEntry?.destination?.route
+                val showBottomBar = tabDestinations.any { currentRoute == it.route }
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     bottomBar = {
-                        NavigationBar {
-                            destinations.forEach { destination ->
-                                NavigationBarItem(
-                                    selected = currentRoute == destination.route,
-                                    onClick = {
-                                        navController.navigate(destination.route) {
-                                            popUpTo(navController.graph.startDestinationId) {
-                                                saveState = true
+                        if (showBottomBar) {
+                            NavigationBar {
+                                tabDestinations.forEach { destination ->
+                                    NavigationBarItem(
+                                        selected = currentRoute == destination.route,
+                                        onClick = {
+                                            navController.navigate(destination.route) {
+                                                popUpTo(navController.graph.startDestinationId) {
+                                                    saveState = true
+                                                }
+                                                launchSingleTop = true
+                                                restoreState = true
                                             }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
-                                    },
-                                    icon = {
-                                        Icon(destination.icon, contentDescription = null)
-                                    },
-                                    label = { Text(destination.label) }
-                                )
+                                        },
+                                        icon = {
+                                            Icon(destination.icon, contentDescription = null)
+                                        },
+                                        label = { Text(destination.label) }
+                                    )
+                                }
                             }
                         }
                     }
@@ -91,10 +99,26 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(innerPadding)
                     ) {
                         composable("dashboard") {
-                            DashboardScreen(viewModel(factory = factory))
+                            DashboardScreen(
+                                viewModel = viewModel(factory = factory),
+                                onOpenGraph = { sourceId ->
+                                    navController.navigate(graphRoute(sourceId))
+                                }
+                            )
                         }
-                        composable("graph") {
-                            GraphScreen(viewModel(factory = factory))
+                        composable(
+                            route = "graph/{sourceId}",
+                            arguments = listOf(
+                                navArgument("sourceId") { type = NavType.StringType }
+                            )
+                        ) { entry ->
+                            GraphScreen(
+                                viewModel = viewModel(
+                                    viewModelStoreOwner = entry,
+                                    factory = factory
+                                ),
+                                onNavigateBack = { navController.popBackStack() }
+                            )
                         }
                         composable("devices") {
                             DevicesScreen(viewModel(factory = factory))
@@ -114,11 +138,11 @@ private class AppViewModelFactory(
     private val btReader: BtBatteryReader
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
-    override fun <T : ViewModel> create(modelClass: Class<T>): T = when {
+    override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T = when {
         modelClass.isAssignableFrom(DashboardViewModel::class.java) ->
             DashboardViewModel(repository) as T
         modelClass.isAssignableFrom(GraphViewModel::class.java) ->
-            GraphViewModel(repository) as T
+            GraphViewModel(repository, extras.createSavedStateHandle()) as T
         modelClass.isAssignableFrom(DevicesViewModel::class.java) ->
             DevicesViewModel(repository, btReader) as T
         else -> throw IllegalArgumentException("Unknown ViewModel: ${modelClass.name}")

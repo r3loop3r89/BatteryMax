@@ -1,10 +1,11 @@
 package com.example.batterymax.ui.graph
 
+import android.net.Uri
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.batterymax.data.BatteryRepository
 import com.example.batterymax.data.db.BatterySampleEntity
-import com.example.batterymax.data.db.TrackedDeviceEntity
 import com.example.batterymax.util.DayRange
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,12 +14,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
-
-data class GraphSource(
-    val id: String,
-    val label: String
-)
 
 data class GraphSeries(
     /** Hour-of-day fractions (0..24) for the x axis. */
@@ -38,24 +33,24 @@ enum class GraphZoomPreset(val label: String) {
 }
 
 data class GraphUiState(
-    val sources: List<GraphSource> = listOf(
-        GraphSource(BatterySampleEntity.SOURCE_PHONE, "Phone")
-    ),
-    val selectedSourceId: String = BatterySampleEntity.SOURCE_PHONE,
+    val label: String = "Phone",
     val series: GraphSeries? = null,
     val zoomPreset: GraphZoomPreset = GraphZoomPreset.FitToData
-) {
-    val selectedLabel: String
-        get() = sources.firstOrNull { it.id == selectedSourceId }?.label ?: "Phone"
-}
+)
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class GraphViewModel(private val repository: BatteryRepository) : ViewModel() {
+class GraphViewModel(
+    private val repository: BatteryRepository,
+    savedStateHandle: SavedStateHandle
+) : ViewModel() {
+
+    private val sourceId: String = Uri.decode(
+        savedStateHandle.get<String>("sourceId") ?: BatterySampleEntity.SOURCE_PHONE
+    )
 
     private val _day = MutableStateFlow(DayRange.today())
     val day: StateFlow<DayRange> = _day
 
-    private val _selectedSourceId = MutableStateFlow(BatterySampleEntity.SOURCE_PHONE)
     private val _zoomPreset = MutableStateFlow(GraphZoomPreset.FitToData)
 
     val uiState: StateFlow<GraphUiState> = combine(
@@ -63,39 +58,22 @@ class GraphViewModel(private val repository: BatteryRepository) : ViewModel() {
             repository.samplesBetween(range.startMillis, range.endMillis)
         },
         repository.trackedDevices,
-        _selectedSourceId,
         _day,
         _zoomPreset
-    ) { samples, trackedDevices, selectedSourceId, day, zoomPreset ->
-        buildState(samples, trackedDevices, selectedSourceId, day, zoomPreset)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), GraphUiState())
-
-    private fun buildState(
-        samples: List<BatterySampleEntity>,
-        trackedDevices: List<TrackedDeviceEntity>,
-        selectedSourceId: String,
-        day: DayRange,
-        zoomPreset: GraphZoomPreset
-    ): GraphUiState {
-        val sources = buildList {
-            add(GraphSource(BatterySampleEntity.SOURCE_PHONE, "Phone"))
-            trackedDevices.forEach { device ->
-                add(GraphSource(device.address, device.name))
-            }
+    ) { samples, trackedDevices, day, zoomPreset ->
+        val label = when (sourceId) {
+            BatterySampleEntity.SOURCE_PHONE -> "Phone"
+            else -> trackedDevices.find { it.address == sourceId }?.name ?: "Bluetooth device"
         }
-        val resolvedSourceId = sources.firstOrNull { it.id == selectedSourceId }?.id
-            ?: BatterySampleEntity.SOURCE_PHONE
-
-        return GraphUiState(
-            sources = sources,
-            selectedSourceId = resolvedSourceId,
+        GraphUiState(
+            label = label,
             series = toSeries(
-                samples.filter { it.source == resolvedSourceId },
+                samples.filter { it.source == sourceId },
                 day.startMillis
             ),
             zoomPreset = zoomPreset
         )
-    }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), GraphUiState())
 
     private fun toSeries(list: List<BatterySampleEntity>, dayStart: Long): GraphSeries? {
         if (list.isEmpty()) return null
@@ -107,10 +85,6 @@ class GraphViewModel(private val repository: BatteryRepository) : ViewModel() {
             },
             y = list.map { it.levelPercent.toDouble() }
         )
-    }
-
-    fun selectSource(sourceId: String) {
-        _selectedSourceId.update { sourceId }
     }
 
     fun selectZoomPreset(preset: GraphZoomPreset) {
